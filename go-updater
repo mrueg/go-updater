@@ -1,75 +1,106 @@
 #!/bin/bash
 
+USAGE="
+usage: $(basename "${0}") [-d] [-h]
+  $(basename "${0}")
+  Ensures your go binaries have been built with system golang.
+optional arguments:
+  -d          enable debug output
+  -h          show this help message and exit
+"
+
 echod () {
 	if [[ ${DEBUG} == 1 ]]; then
 		echo  "$@"
 	fi
 }
 
-if [[ ! -f /usr/bin/goversion ]]; then
-	echo "You need to install dev-go/goversion first"
-	exit 1
-fi
-
-if [[ ! -f /usr/bin/equery ]]; then
-	echo "You need to install app-portage/gentoolkit first"
-	exit 1
-fi
-
-if [[ ! -f /usr/bin/go ]]; then
-	echo "You haven't even dev-lang/go installed. Which version should I compare it to?"
-	exit 1
-fi
-
-# Get GOVERSION
-GOVERSION=$(goversion /usr/bin/go)
-GOVERSION=${GOVERSION#/usr/bin/go }
-echo "Golang version detected: ${GOVERSION}"
-# Get all objects of a package that depends on dev-lang/go and filter for executables
-echo "Collecting packages..."
-PACKAGES=$(equery -q d dev-lang/go)
-REBUILD_PACKAGES=""
-UNKNOWN_PACKAGES=""
-echod "Packages depending on dev-lang/go:"
-for PACKAGE in ${PACKAGES}; do
-	echod -e "\\t=${PACKAGE}"
-	EXECS=$(equery -q f -f obj "=${PACKAGE}")
-	EXECF=()
-	for i in ${EXECS}; do
-		if [[ -x "$i" ]]; then
-			EXECF+=("$i")
-		fi
+parse_args() {
+	local opt OPTIND OPTARG OPTERR
+	while getopts "e:dh" opt; do
+		case ${opt} in
+			d) DEBUG=1;;
+			h|\?)
+				printf "%s\\n" "${USAGE}"
+				exit 0
+			;;
+			?) printf "ERROR: Invalid option: -%s\\n" "${OPTARG}" >> /dev/stderr; exit 1;;
+		esac
 	done
-	EXECV=$(goversion "${EXECF[@]}" 2>/dev/null)
-	REBUILD=0
-	UNKNOWN=0
-	SIFS=${IFS}
-	IFS=$'\n'
-	for EV in ${EXECV}; do
-		if ! [[ "${EV}"  =~ .*${GOVERSION} ]]; then
-			if [[ "${EV}" =~ .*unknown\ Go\ version ]]; then
-				UNKNOWN=1
-			else
-				REBUILD=1
-			fi
-		fi
-	done
-	IFS=${SIFS}
-	if [[ "${REBUILD}" == 1 ]]; then
-		REBUILD_PACKAGES="${REBUILD_PACKAGES} =${PACKAGE}"
-	elif [[ "${UNKNOWN}" == 1 ]]; then
-		UNKNOWN_PACKAGES="${UNKNOWN_PACKAGES} =${PACKAGE}"
+}
+
+check_requirements() {
+	if [[ ! -f /usr/bin/goversion ]]; then
+		echo "You need to install dev-go/goversion first"
+		exit 1
 	fi
-done
-if [[ -n "${REBUILD_PACKAGES}" ]]; then
-	echo "Packages requiring a rebuild:"
-	for PACKAGE in ${REBUILD_PACKAGES}; do
-		echo -e "\\t${PACKAGE}"
+
+	if [[ ! -f /usr/bin/equery ]]; then
+		echo "You need to install app-portage/gentoolkit first"
+		exit 1
+	fi
+
+	if [[ ! -f /usr/bin/go ]]; then
+		echo "You haven't even dev-lang/go installed. Which version should I compare it to?"
+		exit 1
+	fi
+}
+
+run() {
+	# Get GOVERSION
+	GOVERSION=$(goversion /usr/bin/go)
+	GOVERSION=${GOVERSION#/usr/bin/go }
+	echo "Golang version detected: ${GOVERSION}"
+	# Get all objects of a package that depends on dev-lang/go and filter for executables
+	echo "Collecting packages..."
+	PACKAGES=$(equery -q d dev-lang/go)
+	REBUILD_PACKAGES=""
+	UNKNOWN_PACKAGES=""
+	echod "Packages depending on dev-lang/go:"
+	for PACKAGE in ${PACKAGES}; do
+		echod -e "\\t=${PACKAGE}"
+		EXECS=$(equery -q f -f obj "=${PACKAGE}")
+		EXECF=()
+		for i in ${EXECS}; do
+			if [[ -x "$i" ]]; then
+				EXECF+=("$i")
+			fi
+		done
+		EXECV=$(goversion "${EXECF[@]}" 2>/dev/null)
+		REBUILD=0
+		UNKNOWN=0
+		SIFS=${IFS}
+		IFS=$'\n'
+		for EV in ${EXECV}; do
+			if ! [[ "${EV}"  =~ .*${GOVERSION} ]]; then
+				if [[ "${EV}" =~ .*unknown\ Go\ version ]]; then
+					UNKNOWN=1
+				else
+					REBUILD=1
+				fi
+			fi
+		done
+		IFS=${SIFS}
+		if [[ "${REBUILD}" == 1 ]]; then
+			REBUILD_PACKAGES="${REBUILD_PACKAGES} =${PACKAGE}"
+		elif [[ "${UNKNOWN}" == 1 ]]; then
+			UNKNOWN_PACKAGES="${UNKNOWN_PACKAGES} =${PACKAGE}"
+		fi
 	done
-fi
-if [[ -n "${UNKNOWN_PACKAGES}" ]]; then
-	echo "Failed to detect golang version:"
-	for PACKAGE in ${UNKNOWN_PACKAGES}; do
-		echo -e "\\t${PACKAGE}"
-	done
-fi
+	if [[ -n "${REBUILD_PACKAGES}" ]]; then
+		echo "Packages requiring a rebuild:"
+		for PACKAGE in ${REBUILD_PACKAGES}; do
+			echo -e "\\t${PACKAGE}"
+		done
+	fi
+	if [[ -n "${UNKNOWN_PACKAGES}" ]]; then
+		echo "Failed to detect golang version:"
+		for PACKAGE in ${UNKNOWN_PACKAGES}; do
+			echo -e "\\t${PACKAGE}"
+		done
+	fi
+}
+
+parse_args "${@}"
+check_requirements
+run
