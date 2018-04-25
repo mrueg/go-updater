@@ -1,12 +1,15 @@
 #!/bin/bash
 
+VERSION="0.1.0"
+
 USAGE="
-usage: $(basename "${0}") [-d] [-h]
-  $(basename "${0}")
+usage: $(basename "${0}") [-d] [-h] [-v]
+  $(basename "${0}") ${VERSION}
   Ensures your go binaries have been built with system golang.
 optional arguments:
   -d          enable debug output
   -h          show this help message and exit
+  -v          show version
 "
 
 echod () {
@@ -17,11 +20,15 @@ echod () {
 
 parse_args() {
 	local opt OPTIND OPTARG OPTERR
-	while getopts "e:dh" opt; do
+	while getopts "e:dhv" opt; do
 		case ${opt} in
 			d) DEBUG=1;;
 			h|\?)
 				printf "%s\\n" "${USAGE}"
+				exit 0
+			;;
+			v)	
+				printf "go-updater %s\\n" "${VERSION}"
 				exit 0
 			;;
 			?) printf "ERROR: Invalid option: -%s\\n" "${OPTARG}" >> /dev/stderr; exit 1;;
