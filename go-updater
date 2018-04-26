@@ -3,12 +3,13 @@
 VERSION="0.1.0"
 
 USAGE="
-usage: $(basename "${0}") [-d] [-h] [-v]
+usage: $(basename "${0}") [-d] [-h] [-r] [-v]
   $(basename "${0}") ${VERSION}
   Ensures your go binaries have been built with system golang.
 optional arguments:
   -d          enable debug output
   -h          show this help message and exit
+  -r          reinstall packages with binaries that were not compiled with the system's golang via portage
   -v          show version
 "
 
@@ -20,14 +21,15 @@ echod () {
 
 parse_args() {
 	local opt OPTIND OPTARG OPTERR
-	while getopts "e:dhv" opt; do
+	while getopts "dhrv" opt; do
 		case ${opt} in
 			d) DEBUG=1;;
 			h|\?)
 				printf "%s\\n" "${USAGE}"
 				exit 0
 			;;
-			v)	
+			r) REINSTALL=1;;
+			v)
 				printf "go-updater %s\\n" "${VERSION}"
 				exit 0
 			;;
@@ -57,6 +59,7 @@ run() {
 	# Get GOVERSION
 	GOVERSION=$(goversion /usr/bin/go)
 	GOVERSION=${GOVERSION#/usr/bin/go }
+	echo "go-updater ${VERSION}"
 	echo "Golang version detected: ${GOVERSION}"
 	# Get all objects of a package that depends on dev-lang/go and filter for executables
 	echo "Collecting packages..."
@@ -105,6 +108,12 @@ run() {
 		for PACKAGE in ${UNKNOWN_PACKAGES}; do
 			echo -e "\\t${PACKAGE}"
 		done
+	fi
+
+	if [[ ${REINSTALL} ]];  then
+		echo "Reinstalling packages via portage:"
+		echo "emerge --oneshot --keep-going ${REBUILD_PACKAGES}"
+		emerge --oneshot --keep-going ${REBUILD_PACKAGES}
 	fi
 }
 
